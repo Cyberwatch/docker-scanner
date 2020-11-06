@@ -1,0 +1,10 @@
+version: '3.7'
+
+services:
+  docker:
+    image: docker.cyberwatch.fr/docker:edge
+    privileged: true
+    ports:
+      - 2376:2376
+    volumes:
+      - ./certs:/certs
