@@ -1,0 +1,112 @@
+#!/bin/bash
+
+set -e
+
+cat << EOF
+
+We are about to generate a set of TLS certificates to configure a secure
+connection between your Docker runner and your Cyberwatch instance.
+
+If you need more control, or if something goes wrong, your may refer to the
+official Docker documentation: https://docs.docker.com/engine/security/https/
+
+[36mCreating the certificate authority (CA)
+=======================================[0m
+
+This step will generate 2 files:
+
+ - certs/ca/cert.pem:
+
+   This is the public certificate of the CA. It is required by both servers and
+   clients to mutually verifiy their authenticy. It is not sensitive.
+
+ - certs/ca/key.pem:
+
+   This is the private key of the CA. It is required for generating new server
+   or client certificates. It is sensitive: anyone with this key may
+   authenticate against your Docker runners.
+[35m
+EOF
+
+if [ -e certs/ca ]; then
+	echo 'Directory certs/ca already exists. Skipping the CA generation step.'
+else
+	mkdir -p certs/ca
+	openssl req -new -newkey rsa:4096 -nodes -sha256 -keyout certs/ca/key.pem -out certs/ca/cert.pem -x509 -subj '/CN=Docker CA for Cyberwatch'
+fi
+
+cat << EOF
+
+[36mGenerating the Docker daemon certificates
+=========================================[35m
+EOF
+
+mkdir -p certs/dockerd
+
+if [ ! -e certs/dockerd/key.pem ]; then
+	echo
+	openssl genrsa -out certs/dockerd/key.pem 4096
+fi
+
+if [ ! -e certs/dockerd/csr.pem ]; then
+	echo
+	echo 'Generating the certificate signing request...'
+	openssl req -new -key certs/dockerd/key.pem -sha256 -out certs/dockerd/csr.pem -subj '/CN=Docker daemon certificate for Cyberwatch'
+fi
+
+if [ ! -e certs/dockerd/cert.pem ]; then
+	cat <<- EOF
+	[0m
+	You need to specify the names clients may use to connect to the Docker
+	daemon. You may specify one or multiple IP addresses or DNS names,
+	separated by commas. For example:
+	
+	    Subject alternative names: IP:10.1.2.3, DNS:docker.example.com
+
+	If your input is invalid, OpenSSL will fail and you will have to restart this script.
+
+	EOF
+	echo -n '[1mSubject alternative names:[0m '
+	read subjectAltName
+
+	echo '[35m'
+	openssl x509 -req -in certs/dockerd/csr.pem -CA certs/ca/cert.pem -CAkey certs/ca/key.pem -CAcreateserial -sha256 -out certs/dockerd/cert.pem \
+	             -extfile <(echo "subjectAltName = $subjectAltName" ; echo 'extendedKeyUsage = serverAuth')
+fi
+
+cat << EOF
+[0m
+You may now configure dockerd to use the following extra TLS options:
+
+    --tlsverify
+    --tlscacert $PWD/certs/ca/cert.pem
+    --tlscert $PWD/certs/dockerd/cert.pem
+    --tlskey $PWD/certs/dockerd/key.pem
+
+[36mGenerating the Cyberwatch client certificates
+=============================================
+[35m
+EOF
+
+if [ -e certs/cyberwatch ]; then
+	echo 'Directory certs/cyberwatch already exists. Skipping the client certificate generation step.'
+else
+	mkdir -p certs/cyberwatch
+	openssl req -new -newkey rsa:4096 -keyout certs/cyberwatch/key.pem -nodes -sha256 -out certs/cyberwatch/csr.pem -subj '/CN=Docker client certificate for Cyberwatch'
+	openssl x509 -req -in certs/cyberwatch/csr.pem -CA certs/ca/cert.pem -CAkey certs/ca/key.pem -CAcreateserial -sha256 -out certs/cyberwatch/cert.pem \
+	             -extfile <(echo 'extendedKeyUsage = clientAuth')
+fi
+
+cat << EOF
+[0m
+To add configure Cyberwatch to use the newly generated keys, please go to
+Assets > Stored credentials > Add, and specify the following parameters:
+
+    Type: Docker engine
+    Name: My Docker engine
+    URL: tcp://docker.example.com:2376
+    Certificate authority: (paste the content of certs/ca/cert.pem)
+    Client certificate: (paste the content of certs/cyberwatch/cert.pem)
+    Client private key: (paste the content of certs/cyberwatch/key.pem)
+
+EOF
