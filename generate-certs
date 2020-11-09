@@ -76,12 +76,17 @@ fi
 
 cat << EOF
 [0m
-You may now configure dockerd to use the following extra TLS options:
+You may now configure dockerd to use the newly generated certificates by adding
+the following options to your /etc/docker/daemon.json:
 
-    --tlsverify
-    --tlscacert $PWD/certs/ca/cert.pem
-    --tlscert $PWD/certs/dockerd/cert.pem
-    --tlskey $PWD/certs/dockerd/key.pem
+{
+    "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+    "tls": true,
+    "tlsverify": true,
+    "tlscacert": "$PWD/certs/ca/cert.pem",
+    "tlscert": "$PWD/certs/dockerd/cert.pem",
+    "tlskey": "$PWD/certs/dockerd/key.pem"
+}
 
 [36mGenerating the Cyberwatch client certificates
 =============================================
