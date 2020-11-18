@@ -109,4 +109,9 @@ Assets > Stored credentials > Add, and specify the following parameters:
     Client certificate: (paste the content of certs/cyberwatch/cert.pem)
     Client private key: (paste the content of certs/cyberwatch/key.pem)
 
+We can apply the configuration above to your instance if you provide us with API credentials.
 EOF
+read -p '[1mWould you like to proceed to the automatic configuration wizard? (y/n)[0m '
+if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+   "$(dirname "$0")/upload-certs"
+fi
