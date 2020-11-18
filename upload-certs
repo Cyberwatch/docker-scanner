@@ -1,0 +1,108 @@
+#!/bin/bash
+
+cat << EOF
+
+[36mUploading the certificates to your Cyberwatch instance
+=======================================================[0m
+EOF
+
+if ! command -v http > /dev/null ; then
+	cat <<- EOF
+	[31mThis features requires the http command provided by HTTPie, which does not
+	need to be installed.
+	[0m
+	EOF
+	exit 1
+elif ! http --help | grep -q cbw-api-auth ; then
+	cat <<- EOF
+	[31mAuthentication module cbw-api-auth for HTTPie is not installed.
+	Please refer to <https://github.com/Cyberwatch/httpie-cbw-api-auth>.
+	[0m
+	EOF
+	exit 1
+fi
+
+if [ ! -e certs/ca/cert.pem -o ! -e certs/cyberwatch/cert.pem -o ! -e certs/cyberwatch/key.pem ] ; then
+	cat <<- EOF
+	[31mCannot find all the required certificates. Please run generate-certs.
+	[0m
+	EOF
+	exit 1
+fi
+
+cat << EOF
+
+First of all, please specify the URL your Cyberwatch intance should use to
+connect to your Docker engine. For example: tcp://10.1.2.3:2376/
+
+You may edit it later on from the web interface by going into the Assets
+section, Stored credentials page, then editing your Docker engine.
+
+EOF
+
+read -p '[1mDocker URL:[0m ' docker_url
+
+cat << EOF
+
+To upload your Docker certificates to your Cyberwatch instance, this program
+needs API credentials with full access. You may specify them using environment
+variables API_URL, API_KEY and SECRET_KEY.
+
+You may find your API credentials in the Admin section, User page, go to your
+user's edition page, then clicking the button "See my API keys".
+
+EOF
+
+api_url=$API_URL
+api_key=$API_KEY
+secret_key=$SECRET_KEY
+
+if [ -z "$api_url" ]; then
+	read -p '[1mAPI URL:[0m ' api_url
+fi
+
+# Drop the /api/vN/ suffix if the user specified it, because the API
+# documentation tends to assume it’s part of the API_URL.
+api_key=$(sed -e 's|/api/v[0-9]\+/\?$||' <<< "$api_key")
+
+if [ -z "$api_key" ]; then
+	read -p '[1mAPI key:[0m ' api_key
+fi
+
+if [ -z "$secret_key" ]; then
+	read -p '[1mSecret key:[0m ' secret_key
+fi
+
+response=$(http --check-status --verify no --auth-type=cbw-api-auth --auth="$api_key:$secret_key" \
+	POST "$api_url/api/v3/assets/credentials" \
+	type='CbwRam::Credentials::DockerEngine' \
+	name='Docker engine for Cyberwatch' \
+	endpoint="$docker_url" \
+	ca_cert="$(cat certs/ca/cert.pem)" \
+	client_cert="$(cat certs/cyberwatch/cert.pem)" \
+	client_key="$(cat certs/cyberwatch/key.pem)" 2>&1)
+
+if [ $? -ne 0 ]; then
+	cat <<- EOF
+
+	[31mCould not configure the Docker engine:
+	$response
+	[0m
+	EOF
+	exit 1
+fi
+
+if [[ $response =~ '"id":'([[:digit:]]+) ]]; then
+	credential_url="$api_url/ram/credentials/${BASH_REMATCH[1]}/edit"
+else
+	credential_url="$api_url/ram/credentials/"
+fi
+
+cat << EOF
+
+[32mSuccess![0m
+
+You may see and edit your new Docker engine configuration at:
+$credential_url
+
+EOF
