@@ -2,6 +2,9 @@
 
 set -e
 
+# Generate certificates valid for 2 years.
+certificateValidityDays=730
+
 cat << EOF
 
 We are about to generate a set of TLS certificates to configure a secure
@@ -32,7 +35,8 @@ if [ -e certs/ca ]; then
 	echo 'Directory certs/ca already exists. Skipping the CA generation step.'
 else
 	mkdir -p certs/ca
-	openssl req -new -newkey rsa:4096 -nodes -sha256 -keyout certs/ca/key.pem -out certs/ca/cert.pem -x509 -subj '/CN=Docker CA for Cyberwatch'
+	openssl req -new -newkey rsa:4096 -nodes -sha256 -keyout certs/ca/key.pem -out certs/ca/cert.pem \
+	            -x509 -days $certificateValidityDays -subj '/CN=Docker CA for Cyberwatch'
 fi
 
 cat << EOF
@@ -71,7 +75,7 @@ if [ ! -e certs/dockerd/cert.pem ]; then
 
 	echo '[35m'
 	openssl x509 -req -in certs/dockerd/csr.pem -CA certs/ca/cert.pem -CAkey certs/ca/key.pem -CAcreateserial -sha256 -out certs/dockerd/cert.pem \
-	             -extfile <(echo "subjectAltName = $subjectAltName" ; echo 'extendedKeyUsage = serverAuth')
+	             -days $certificateValidityDays -extfile <(echo "subjectAltName = $subjectAltName" ; echo 'extendedKeyUsage = serverAuth')
 fi
 
 cat << EOF
@@ -99,7 +103,7 @@ else
 	mkdir -p certs/cyberwatch
 	openssl req -new -newkey rsa:4096 -keyout certs/cyberwatch/key.pem -nodes -sha256 -out certs/cyberwatch/csr.pem -subj '/CN=Docker client certificate for Cyberwatch'
 	openssl x509 -req -in certs/cyberwatch/csr.pem -CA certs/ca/cert.pem -CAkey certs/ca/key.pem -CAcreateserial -sha256 -out certs/cyberwatch/cert.pem \
-	             -extfile <(echo 'extendedKeyUsage = clientAuth')
+	             -days $certificateValidityDays -extfile <(echo 'extendedKeyUsage = clientAuth')
 fi
 
 cat << EOF
